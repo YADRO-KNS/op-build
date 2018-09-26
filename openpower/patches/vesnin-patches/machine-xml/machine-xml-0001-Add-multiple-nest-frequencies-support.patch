@@ -1,0 +1,32 @@
+From baad3d7137bbb1125e2923716b579b8d0359f133 Mon Sep 17 00:00:00 2001
+From: Artem Senichev <a.senichev@yadro.com>
+Date: Wed, 26 Sep 2018 15:36:19 +0300
+Subject: [PATCH] Add multiple nest frequencies support
+
+Actually VESNIN server support multiple nest frequency, we need
+to specify it to work with 11-cores CPU (165W).
+Made on the advice of Alvin Wang <wangat@tw.ibm.com>.
+
+Signed-off-by: Artem Senichev <a.senichev@yadro.com>
+---
+ vesnin.xml | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/vesnin.xml b/vesnin.xml
+index e28d4e7..b0959f9 100644
+--- a/vesnin.xml
++++ b/vesnin.xml
+@@ -13696,6 +13696,10 @@
+ 		<id>HIDDEN_ERRLOGS_ENABLE</id>
+ 		<default>0x00</default>
+ 	</attribute>
++	<attribute>
++		<id>MRW_NEST_CAPABLE_FREQUENCIES_SYS</id>
++		<default>2000_MHZ_OR_2400_MHZ</default>
++	</attribute>
+ </targetInstance>
+ <targetInstance>
+ 	<id>node-0</id>
+-- 
+2.17.1
+
