@@ -1,0 +1,51 @@
+From 1f84130a54395958e9332ef92706ae4b7b563697 Mon Sep 17 00:00:00 2001
+From: Dan Crowell <dcrowell@us.ibm.com>
+Date: Thu, 6 Dec 2018 19:29:44 -0600
+Subject: [PATCH] Make OPFR:MB VPD keyword optional
+
+The OPFR:MB keyword is not present in every FRU produced as part
+of the P8 products.
+
+Change-Id: Iea4816313614ee6b21e10b6507281f6f1b9c4fec
+CQ: SW452692
+Reviewed-on: http://rchgit01.rchland.ibm.com/gerrit1/69543
+Tested-by: Jenkins Server <pfd-jenkins+hostboot@us.ibm.com>
+Tested-by: Jenkins OP Build CI <op-jenkins+hostboot@us.ibm.com>
+Tested-by: Jenkins OP HW <op-hw-jenkins+hostboot@us.ibm.com>
+Reviewed-by: Matt Derksen <mderkse1@us.ibm.com>
+Reviewed-by: Nicholas E. Bofferding <bofferdn@us.ibm.com>
+Signed-off-by: Artem Senichev <a.senichev@yadro.com>
+---
+ src/usr/ipmi/ipmifruinv.C | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/src/usr/ipmi/ipmifruinv.C b/src/usr/ipmi/ipmifruinv.C
+index 2b74e453f..6989b2ea1 100644
+--- a/src/usr/ipmi/ipmifruinv.C
++++ b/src/usr/ipmi/ipmifruinv.C
+@@ -1261,10 +1261,18 @@ errlHndl_t backplaneIpmiFruInv::buildBoardInfoArea(
+         // Grab VPD data into seperate data vector
+         std::vector<uint8_t> mfgDateData;
+         l_errl = addVpdData(mfgDateData, PVPD::OPFR, PVPD::MB, false, false);
+-        if (l_errl) { break; }
+-
+-        // Pass that to the function that sets the Build date
+-        setMfgData(io_data, mfgDateData);
++        if (l_errl)
++        {
++            // The MB keyword was optional on older cards so just ignore
++            //  any errors
++            delete l_errl;
++            l_errl = NULL;
++        }
++        else
++        {
++            // Pass that to the function that sets the Build date
++            setMfgData(io_data, mfgDateData);
++        }
+ 
+         //Set Vendor Name - ascii formatted data
+         l_errl = addVpdData(io_data, PVPD::OPFR, PVPD::VN, true);
+-- 
+2.19.2
+
