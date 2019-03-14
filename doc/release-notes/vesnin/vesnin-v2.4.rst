@@ -30,8 +30,11 @@ VESNIN-specific changes
 * Renumber membuf FRU names:
   FRU names of memory buffers are now equal to their names inside eSEL.
 
-* Fix ``fwts`` failure. Device tree now conatains ``open-power`` attribute
-  inside ``ibm,firmware-versions`` node.
+* Fix ``fwts`` failures. Device tree now conatains ``open-power`` attribute
+  inside ``ibm,firmware-versions`` node, has proper ``#address-cells``
+  and ``#size-cells`` attributes in ``vpd`` and ``vpd/processor`` nodes,
+  as well as correct ``reg`` attributes in ``vpd/processor/cpu`` and
+  ``vpd/dimm`` nodes.
 
 * Handle 'unsupported' status for DCMI messages. DCMI Power management
   is not supported for VESNIN and that is now reported by BMC. React
