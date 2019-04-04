@@ -1,0 +1,34 @@
+From 9d9cdf970f28ceff355f1c3adab18a7c27df36c3 Mon Sep 17 00:00:00 2001
+From: Maxim Polyakov <m.polyakov@yadro.com>
+Date: Wed, 3 Apr 2019 18:47:06 +0300
+Subject: [PATCH] devtree: Add ranges to "ibm,hostboot" node
+
+This node contain #address-cell/#size-cells without "ranges"
+property. For this reason, "dtc" utility displays the following
+warnings:
+
+ /ibm,hostboot: unnecessary #address-cells/#size-cells without
+ "ranges" or child "reg" property
+
+This commit fixes this bug by adding the "ranges" property.
+
+Signed-off-by: Maxim Polyakov <m.polyakov@yadro.com>
+---
+ src/usr/devtree/bld_devtree.C | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/usr/devtree/bld_devtree.C b/src/usr/devtree/bld_devtree.C
+index ec0a6ce..1eb5f0d 100644
+--- a/src/usr/devtree/bld_devtree.C
++++ b/src/usr/devtree/bld_devtree.C
+@@ -1393,6 +1393,7 @@ void add_reserved_mem(devTree * i_dt,
+     dtOffset_t rootMemNode = i_dt->addNode(rootNode, "ibm,hostboot");
+     i_dt->addPropertyCell32(rootMemNode, "#address-cells", 2);
+     i_dt->addPropertyCell32(rootMemNode, "#size-cells", 2);
++    i_dt->addProperty(rootMemNode, "ranges");
+     dtOffset_t reservedMemNode = i_dt->addNode(rootMemNode, "reserved-memory");
+     i_dt->addPropertyCell32(reservedMemNode, "#address-cells", 2);
+     i_dt->addPropertyCell32(reservedMemNode, "#size-cells", 2);
+-- 
+2.7.4
+
