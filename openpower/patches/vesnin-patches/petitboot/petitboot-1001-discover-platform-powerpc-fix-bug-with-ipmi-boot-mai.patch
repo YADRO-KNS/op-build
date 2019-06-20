@@ -1,0 +1,283 @@
+From 1d36b4b72fd6fa0a02b4effae8c6a3bfa62a9032 Mon Sep 17 00:00:00 2001
+From: Maxim Polyakov <m.polyakov@yadro.com>
+Date: Mon, 17 Jun 2019 18:58:14 +0300
+Subject: [PATCH] discover/platform-powerpc: fix bug with ipmi boot mailbox
+
+According to IPMI Specification, in the IPMI response message with
+boot initiator mailbox information block, byte 4 should be used as
+the block selector (1). However, this parameter isn't taken into
+account in the code and bytes 4-6 in the block 0 are defined as the
+IANA enterprise ID number. Thus, IANA contains an invalid value and
+doesn't match the IBM ID. For this reason, the get_ipmi_boot_mailbox()
+procedure fails with an error and the boot options from mailbox doesn't
+apply.
+/var/log/petitboot/pb-discover.log:
+
+IANA number unrecognised: 0x00:0x02:0x00
+
+This patch adds the missing block selector parameter. In addition,
+the get_ipmi_boot_mailbox_block() now returns the actual size of
+mailbox data block without selector (1).
+
+[1] page 398, IPMI Specification v2.0, Revision 1.1, October 1, 2013
+
+It has been tested on Vesnin P8 Server.
+
+Signed-off-by: Maxim Polyakov <m.polyakov@yadro.com>
+---
+ discover/platform-powerpc.c | 136 ++++++++++++++++++++++++++++----------------
+ 1 file changed, 88 insertions(+), 48 deletions(-)
+
+diff --git a/discover/platform-powerpc.c b/discover/platform-powerpc.c
+index 5d7cc59..99b5167 100644
+--- a/discover/platform-powerpc.c
++++ b/discover/platform-powerpc.c
+@@ -22,6 +22,29 @@
+ #include "ipmi.h"
+ #include "dt.h"
+ 
++#define CHASSIS_BOOT_MBOX_IANA_SZ 3
++#define CHASSIS_BOOT_MBOX_DATA_SZ 16
++#define CHASSIS_BOOT_MBOX_BLOCK0_DATA_SZ \
++	(CHASSIS_BOOT_MBOX_DATA_SZ - CHASSIS_BOOT_MBOX_IANA_SZ)
++
++typedef struct __attribute__((packed)) {
++	uint8_t iana[CHASSIS_BOOT_MBOX_IANA_SZ];
++	uint8_t data[CHASSIS_BOOT_MBOX_BLOCK0_DATA_SZ];
++} mbox_block0_t;
++
++typedef union {
++		uint8_t data[CHASSIS_BOOT_MBOX_DATA_SZ];
++		mbox_block0_t b0;
++} mbox_t;
++
++typedef struct __attribute__((packed)) {
++	uint8_t cc;
++	uint8_t param_version;
++	uint8_t param_valid;
++	uint8_t block_selector;
++	mbox_t mbox;
++} ipmi_mbox_response_t;
++
+ static const char *partition = "common";
+ static const char *sysparams_dir = "/sys/firmware/opal/sysparams/";
+ static const char *devtree_dir = "/proc/device-tree/";
+@@ -437,10 +460,10 @@ static int get_ipmi_bootdev_ipmi(struct platform_powerpc *platform,
+ }
+ 
+ static int get_ipmi_boot_mailbox_block(struct platform_powerpc *platform,
+-		char *buf, uint8_t block)
++		mbox_t *mailbox, uint8_t block)
+ {
+-	size_t blocksize = 16;
+-	uint8_t resp[3 + 16];
++	size_t blocksize;
++	ipmi_mbox_response_t ipmi_mbox_resp = { .cc = 0xFF };
+ 	uint16_t resp_len;
+ 	char *debug_buf;
+ 	int rc;
+@@ -449,60 +472,71 @@ static int get_ipmi_boot_mailbox_block(struct platform_powerpc *platform,
+ 		block, /* set selector */
+ 		0x00,  /* no block selector */
+ 	};
++	size_t ipmi_header_len = sizeof(ipmi_mbox_response_t) - sizeof(mbox_t);
+ 
+-	resp_len = sizeof(resp);
++	resp_len = sizeof(ipmi_mbox_response_t);
+ 	rc = ipmi_transaction(platform->ipmi, IPMI_NETFN_CHASSIS,
+ 			IPMI_CMD_CHASSIS_GET_SYSTEM_BOOT_OPTIONS,
+ 			req, sizeof(req),
+-			resp, &resp_len,
++			(uint8_t*)&ipmi_mbox_resp, &resp_len,
+ 			ipmi_timeout);
+ 	if (rc) {
+ 		pb_log("platform: error reading IPMI boot options\n");
+ 		return -1;
+ 	}
+ 
+-	if (resp_len < sizeof(resp)) {
+-		if (resp_len < 3) {
+-			pb_log("platform: unexpected length (%d) in "
+-					"boot options mailbox response\n",
+-					resp_len);
+-			return -1;
+-		}
+-
+-		if (resp_len == 4) {
+-			pb_debug_fn("block %hu empty\n", block);
+-			return 0;
+-		}
++	if (resp_len > sizeof(ipmi_mbox_response_t)) {
++		pb_debug("platform: invalid mailbox response size!\n");
++		return -1;
++	}
+ 
+-		blocksize = sizeof(resp) - 3;
+-		pb_debug_fn("Mailbox block %hu returns only %zu bytes in block\n",
+-				block, blocksize);
++	/* response message size is at least 4 bytes */
++	if (resp_len < ipmi_header_len) {
++		pb_log("platform: unexpected length (%d) in "
++				"boot options mailbox response\n",
++				resp_len);
++		return -1;
+ 	}
+ 
+-	debug_buf = format_buffer(platform, resp, resp_len);
++	blocksize = resp_len - ipmi_header_len;
++	pb_debug_fn("Mailbox block %hu returns only %zu bytes in block\n",
++			block, blocksize);
++
++	debug_buf = format_buffer(platform, (uint8_t*)&ipmi_mbox_resp, resp_len);
+ 	pb_debug_fn("IPMI bootdev mailbox block %hu:\n%s\n", block, debug_buf);
+ 	talloc_free(debug_buf);
+ 
+-	if (resp[0] != 0) {
++	if (ipmi_mbox_resp.cc != 0) {
+ 		pb_log("platform: non-zero completion code %d from IPMI req\n",
+-				resp[0]);
++				ipmi_mbox_resp.cc);
+ 		return -1;
+ 	}
+ 
+ 	/* check for correct parameter version */
+-	if ((resp[1] & 0xf) != 0x1) {
++	if ((ipmi_mbox_resp.param_version & 0xf) != 0x1) {
+ 		pb_log("platform: unexpected version (0x%x) in "
+-				"boot mailbox response\n", resp[0]);
++				"boot mailbox response\n", ipmi_mbox_resp.param_version);
+ 		return -1;
+ 	}
+ 
+ 	/* check for valid paramters */
+-	if (resp[2] & 0x80) {
++	if (ipmi_mbox_resp.param_valid & 0x80) {
+ 		pb_debug("platform: boot mailbox parameters are invalid/locked\n");
+ 		return -1;
+ 	}
+ 
+-	memcpy(buf, &resp[3], blocksize);
++	if (block != ipmi_mbox_resp.block_selector) {
++		pb_debug("platform: returned boot mailbox block doesn't match "
++				  "requested\n");
++		return -1;
++	}
++
++	if (!blocksize) {
++		pb_debug_fn("block %hu empty\n", block);
++		return -1;
++	}
++
++	memcpy(mailbox, &ipmi_mbox_resp.mbox, blocksize);
+ 
+ 	return blocksize;
+ }
+@@ -511,12 +545,10 @@ static int get_ipmi_boot_mailbox(struct platform_powerpc *platform,
+ 		char **buf)
+ {
+ 	char *mailbox_buffer, *prefix;
+-	const size_t blocksize = 16;
+-	char block_buffer[blocksize];
++	mbox_t mailbox;
+ 	size_t mailbox_size;
+ 	int content_size;
+ 	uint8_t i;
+-	int rc;
+ 
+ 	mailbox_buffer = NULL;
+ 	mailbox_size = 0;
+@@ -527,15 +559,16 @@ static int get_ipmi_boot_mailbox(struct platform_powerpc *platform,
+ 	 * on higher numbers.
+ 	 */
+ 	for (i = 0; i < UCHAR_MAX; i++) {
+-		rc = get_ipmi_boot_mailbox_block(platform, block_buffer, i);
+-		if (rc < 3 && i == 0) {
++		uint8_t *boot_opt_data;
++		int block_size = get_ipmi_boot_mailbox_block(platform, &mailbox, i);
++		if (block_size < CHASSIS_BOOT_MBOX_IANA_SZ && i == 0) {
+ 			/*
+ 			 * Immediate failure, no blocks read or missing IANA
+ 			 * number.
+ 			 */
+ 			return -1;
+ 		}
+-		if (rc < 1) {
++		if (block_size < 1) {
+ 			/* Error or no bytes read */
+ 			break;
+ 		}
+@@ -543,28 +576,35 @@ static int get_ipmi_boot_mailbox(struct platform_powerpc *platform,
+ 		if (i == 0) {
+ 			/*
+ 			 * The first three bytes of block zero are an IANA
+-			 * Enterprise ID number. Check it matches the IBM
+-			 * number, '2'.
++			 * Enterprise ID number
+ 			 */
+-			if (block_buffer[0] != 0x02 ||
+-				block_buffer[1] != 0x00 ||
+-				block_buffer[2] != 0x00) {
++			block_size -= CHASSIS_BOOT_MBOX_IANA_SZ;
++			boot_opt_data = &mailbox.b0.data;
++
++			/* Check IANA matches the IBM number, '2' */
++			if (mailbox.b0.iana[0] != 0x02 ||
++				mailbox.b0.iana[1] != 0x00 ||
++				mailbox.b0.iana[2] != 0x00) {
+ 				pb_log_fn("IANA number unrecognised: 0x%x:0x%x:0x%x\n",
+-						block_buffer[0],
+-						block_buffer[1],
+-						block_buffer[2]);
++						mailbox.b0.iana[0],
++						mailbox.b0.iana[1],
++						mailbox.b0.iana[2]);
+ 				return -1;
+ 			}
++		} else {
++			boot_opt_data = &mailbox.data;
+ 		}
+ 
+ 		mailbox_buffer = talloc_realloc(platform, mailbox_buffer,
+-				char, mailbox_size + rc);
++				char, mailbox_size + block_size);
+ 		if (!mailbox_buffer) {
+ 			pb_log_fn("Failed to allocate mailbox buffer\n");
+ 			return -1;
+ 		}
+-		memcpy(mailbox_buffer + mailbox_size, block_buffer, rc);
+-		mailbox_size += rc;
++
++		memcpy(mailbox_buffer + mailbox_size, boot_opt_data, block_size);
++
++		mailbox_size += block_size;
+ 	}
+ 
+ 	if (i < 5)
+@@ -574,10 +614,10 @@ static int get_ipmi_boot_mailbox(struct platform_powerpc *platform,
+ 	else
+ 		pb_debug_fn("%hu blocks read (%zu bytes)\n", i, mailbox_size);
+ 
+-	if (mailbox_size < 3 + strlen("petitboot,bootdevs="))
++	if (mailbox_size < strlen("petitboot,bootdevs="))
+ 		return -1;
+ 
+-	prefix = talloc_strndup(mailbox_buffer, mailbox_buffer + 3,
++	prefix = talloc_strndup(mailbox_buffer, mailbox_buffer,
+ 			strlen("petitboot,bootdevs="));
+ 	if (!prefix) {
+ 		pb_log_fn("Couldn't check prefix\n");
+@@ -595,9 +635,9 @@ static int get_ipmi_boot_mailbox(struct platform_powerpc *platform,
+ 	}
+ 
+ 	/* Don't include IANA number in buffer */
+-	content_size = mailbox_size - 3 - strlen("petitboot,bootdevs=");
++	content_size = mailbox_size - strlen("petitboot,bootdevs=");
+ 	*buf = talloc_memdup(platform,
+-			mailbox_buffer + 3 + strlen("petitboot,bootdevs="),
++			mailbox_buffer + strlen("petitboot,bootdevs="),
+ 			content_size + 1);
+ 	(*buf)[content_size] = '\0';
+ 
+-- 
+2.7.4
+
