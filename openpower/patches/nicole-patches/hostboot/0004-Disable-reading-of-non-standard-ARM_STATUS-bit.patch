@@ -1,0 +1,28 @@
+From 049abe3921344e316c4d154711ba43340e72dc79 Mon Sep 17 00:00:00 2001
+From: Artem Senichev <a.senichev@yadro.com>
+Date: Wed, 4 Dec 2019 13:25:15 +0300
+Subject: [PATCH] Disable reading of non-standard ARM_STATUS bit
+
+Bit #3 of ARM_STATUS register is reserved and cannot be read.
+
+Signed-off-by: Artem Senichev <a.senichev@yadro.com>
+---
+ src/usr/isteps/nvdimm/nvdimm.C | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/usr/isteps/nvdimm/nvdimm.C b/src/usr/isteps/nvdimm/nvdimm.C
+index cf5af78ba..ed937789e 100644
+--- a/src/usr/isteps/nvdimm/nvdimm.C
++++ b/src/usr/isteps/nvdimm/nvdimm.C
+@@ -4806,7 +4806,7 @@ errlHndl_t nvdimmCheckArmSuccess(Target *i_nvdimm, bool i_arm_timeout)
+         TRACFCOMP(g_trac_nvdimm, ERR_MRK"nvdimmCheckArmSuccess() nvdimm[%X]"
+                   "failed to read arm status reg!",get_huid(i_nvdimm));
+     }
+-    else if (((l_data & ARM_ERROR) == ARM_ERROR) || ((l_data & RESET_N_ARMED) != RESET_N_ARMED) || i_arm_timeout)
++    else if (((l_data & ARM_ERROR) == ARM_ERROR) || i_arm_timeout)
+     {
+ 
+         TRACFCOMP(g_trac_nvdimm, ERR_MRK"nvdimmCheckArmSuccess() nvdimm[%X]"
+-- 
+2.24.0
+

@@ -1,0 +1,23 @@
+diff --git a/hdata/memory.c b/hdata/memory.c
+index 9af7ae71..756bcc04 100644
+--- a/hdata/memory.c
++++ b/hdata/memory.c
+@@ -585,11 +585,18 @@ static void get_msareas(struct dt_node *root,
+ 				add_memory_controller(msarea, arange);
+ 
+ 			offset = offsetof(struct HDIF_ms_area_address_range, phys_attr);
++			prerror(">>> HDAT: %d/%d, attr=%x chip=%x, cid=%x\n", be32_to_cpu(arr->eactsz), offset, be32_to_cpu(arange->phys_attr), be32_to_cpu(arange->chip), be32_to_cpu(arange->controller_id)); // >>> HDAT: 24 24
+ 			if (be32_to_cpu(arr->eactsz) >= offset) {
+ 				uint32_t attr = be32_to_cpu(arange->phys_attr);
+ 
+ 				type = GETFIELD(PHYS_ATTR_TYPE_MASK, attr);
+ 				status = GETFIELD(PHYS_ATTR_STATUS_MASK, attr);
++
++				// Hack to add NVDIMM to the device tree (only for the first memory controller on CPU0)
++				if (be32_to_cpu(arange->chip) == 0 &&
++					be32_to_cpu(arange->controller_id) == 0x88800000) {
++					type = PHYS_ATTR_TYPE_NVDIMM;
++				}
+ 			}
+ 
+ 			if (!add_address_range(root, id, arange, type, status))

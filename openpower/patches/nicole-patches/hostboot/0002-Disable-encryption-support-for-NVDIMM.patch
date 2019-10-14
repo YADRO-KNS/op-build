@@ -1,0 +1,92 @@
+From 118b7a66eb3bac450e7d124abea2d69b8f7dc71e Mon Sep 17 00:00:00 2001
+From: Artem Senichev <a.senichev@yadro.com>
+Date: Mon, 18 Nov 2019 15:57:34 +0300
+Subject: [PATCH] Disable encryption support for NVDIMM
+
+Nicole doesn't have TPM module to generate random numbers and store
+keys.
+
+Signed-off-by: Artem Senichev <a.senichev@yadro.com>
+---
+ src/usr/isteps/nvdimm/nvdimm.C         | 11 +++++++++++
+ src/usr/isteps/nvdimm/nvdimmErrorLog.C |  4 ++++
+ 2 files changed, 15 insertions(+)
+
+diff --git a/src/usr/isteps/nvdimm/nvdimm.C b/src/usr/isteps/nvdimm/nvdimm.C
+index 3c6c1a055..70efa94af 100644
+--- a/src/usr/isteps/nvdimm/nvdimm.C
++++ b/src/usr/isteps/nvdimm/nvdimm.C
+@@ -2290,10 +2290,12 @@ void nvdimm_init(Target *i_nvdimm)
+             break;
+         }
+ 
++#ifdef CONFIG_TPM
+         // Unlock encryption if enabled
+         TargetHandleList l_nvdimmTargetList;
+         l_nvdimmTargetList.push_back(i_nvdimm);
+         NVDIMM::nvdimm_encrypt_unlock(l_nvdimmTargetList);
++#endif // CONFIG_TPM
+ 
+     }while(0);
+ 
+@@ -2402,6 +2404,11 @@ void nvdimm_thresholds(TARGETING::TargetHandleList &i_nvdimmList)
+ errlHndl_t nvdimm_getRandom(uint8_t* o_genData)
+ {
+     errlHndl_t l_err = nullptr;
++
++#ifndef CONFIG_TPM
++    memset(o_genData, 0x42 /* Random number */, ENC_KEY_SIZE);
++#else // CONFIG_TPM
++
+     uint8_t l_xtraData[ENC_KEY_SIZE] = {0};
+ 
+     do
+@@ -2436,6 +2443,8 @@ errlHndl_t nvdimm_getRandom(uint8_t* o_genData)
+ 
+     } while(0);
+ 
++#endif // CONFIG_TPM
++
+     return l_err;
+ }
+ 
+@@ -4970,6 +4979,7 @@ bool nvdimmArm(TargetHandleList &i_nvdimmTargetList)
+         }
+     }
+ 
++#ifdef CONFIG_TPM
+     // Encryption unlocked check
+     // Check one nvdimm at a time
+     for (auto const l_nvdimm : i_nvdimmTargetList)
+@@ -5021,6 +5031,7 @@ bool nvdimmArm(TargetHandleList &i_nvdimmTargetList)
+             return false;
+         }
+     }
++#endif // CONFIG_TPM
+ 
+     // Mask MBACALFIR EventN to separate ARM handling
+     for (TargetHandleList::iterator it = i_nvdimmTargetList.begin();
+diff --git a/src/usr/isteps/nvdimm/nvdimmErrorLog.C b/src/usr/isteps/nvdimm/nvdimmErrorLog.C
+index 9fbd27d14..95ffde2f7 100644
+--- a/src/usr/isteps/nvdimm/nvdimmErrorLog.C
++++ b/src/usr/isteps/nvdimm/nvdimmErrorLog.C
+@@ -270,12 +270,16 @@ void nvdimmTraceRegs(Target *i_nvdimm, nvdimm_reg_t& o_RegInfo)
+     }
+     o_RegInfo.Set_Event_Notification_Status = l_data;
+ 
++#ifndef CONFIG_TPM
++    l_data = 0;
++#else
+     // Read NVDIMM Encryption Configuration and Status Register for Security Errors
+     l_err = nvdimmReadReg(i_nvdimm, ENCRYPTION_CONFIG_STATUS, l_data);
+     if(l_err)
+     {
+         errlCommit( l_err, NVDIMM_COMP_ID );
+     }
++#endif // CONFIG_TPM
+     o_RegInfo.Encryption_Config_Status = l_data;
+ }
+ 
+-- 
+2.24.0
+

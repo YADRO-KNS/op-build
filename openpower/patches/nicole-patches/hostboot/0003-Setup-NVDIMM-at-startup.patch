@@ -1,0 +1,37 @@
+From 03908356205506acf047907b302f222f5b95a8f7 Mon Sep 17 00:00:00 2001
+From: Artem Senichev <a.senichev@yadro.com>
+Date: Mon, 18 Nov 2019 16:05:07 +0300
+Subject: [PATCH] Setup NVDIMM at startup
+
+Set Energy source to "Device Managed Policy".
+We need to do it before reading timeouts configuration because the
+following call to nvdimmGetTimeoutVal() reads page #1.
+
+Signed-off-by: Artem Senichev <a.senichev@yadro.com>
+---
+ src/usr/isteps/nvdimm/nvdimm.C | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/usr/isteps/nvdimm/nvdimm.C b/src/usr/isteps/nvdimm/nvdimm.C
+index 2a8787ccf..311928877 100644
+--- a/src/usr/isteps/nvdimm/nvdimm.C
++++ b/src/usr/isteps/nvdimm/nvdimm.C
+@@ -2110,6 +2110,15 @@ void nvdimm_init(Target *i_nvdimm)
+             errlCommit(l_err, NVDIMM_COMP_ID);
+         }
+ 
++        // Set Energy Source policy
++        l_err = nvdimmSetESPolicy(i_nvdimm);
++        if (l_err)
++        {
++            TRACFCOMP(g_trac_nvdimm, ERR_MRK"nvdimm_init() nvdimm[%X], error setting energy policy",
++                      get_huid(i_nvdimm));
++            break;
++        }
++
+         // Get the timeout values for the major ops at init
+         l_err = nvdimmGetTimeoutVal(i_nvdimm);
+         if (l_err)
+-- 
+2.23.0
+
