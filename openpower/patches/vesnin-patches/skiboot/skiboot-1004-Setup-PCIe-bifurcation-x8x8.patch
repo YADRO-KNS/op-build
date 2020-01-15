@@ -1,0 +1,128 @@
+From b891b2d745788f63217d59fb080e02c1a6d89c42 Mon Sep 17 00:00:00 2001
+From: Artem Senichev <a.senichev@yadro.com>
+Date: Wed, 15 Jan 2020 17:08:59 +0300
+Subject: [PATCH] Setup PCIe bifurcation (x8x8)
+
+PCIe ports connected to CPU1 and CPU3 now work as x8x8 instead of x16.
+
+Signed-off-by: Artem Senichev <a.senichev@yadro.com>
+---
+ platforms/astbmc/vesnin.c | 50 ++++++++++++++++++++++++++-------------
+ 1 file changed, 34 insertions(+), 16 deletions(-)
+
+diff --git a/platforms/astbmc/vesnin.c b/platforms/astbmc/vesnin.c
+index bd412aa8..068c8260 100644
+--- a/platforms/astbmc/vesnin.c
++++ b/platforms/astbmc/vesnin.c
+@@ -65,7 +65,7 @@ static const struct slot_table_entry vesnin_phb0_0_slot[] = {
+ 	{
+ 		.etype = st_pluggable_slot,
+ 		.location = ST_LOC_DEVFN(0,0),
+-		.name = "AUX connector00",
++		.name = "AUX connector0",
+ 	},
+ 	{ .etype = st_end }
+ };
+@@ -75,28 +75,18 @@ static const struct slot_table_entry vesnin_plx_slots[] = {
+ 	{
+ 		.etype = st_builtin_dev,
+ 		.location = ST_LOC_DEVFN(0x01,0),
+-		.name = "Backplane SSD0",
++		.name = "Backplane BMC",
+ 	},
+ 	{
+ 		.etype = st_builtin_dev,
+ 		.location = ST_LOC_DEVFN(0x02,0),
+-		.name = "Backplane SSD1",
++		.name = "Backplane USB",
+ 	},
+ 	{
+ 		.etype = st_builtin_dev,
+ 		.location = ST_LOC_DEVFN(0x03,0),
+ 		.name = "Backplane LAN",
+ 	},
+-	{
+-		.etype = st_builtin_dev,
+-		.location = ST_LOC_DEVFN(0x04,0),
+-		.name = "Backplane BMC",
+-	},
+-	{
+-		.etype = st_builtin_dev,
+-		.location = ST_LOC_DEVFN(0x05,0),
+-		.name = "Backplane USB",
+-	},
+ 	{ .etype = st_end }
+ };
+ 
+@@ -141,7 +131,16 @@ static const struct slot_table_entry vesnin_phb8_1_slot[] = {
+ 	{
+ 		.etype = st_pluggable_slot,
+ 		.location = ST_LOC_DEVFN(0,0),
+-		.name = "AUX connector10",
++		.name = "AUX connector1",
++	},
++	{ .etype = st_end }
++};
++
++static const struct slot_table_entry vesnin_phb8_2_slot[] = {
++	{
++		.etype = st_pluggable_slot,
++		.location = ST_LOC_DEVFN(0,0),
++		.name = "AUX connector2",
+ 	},
+ 	{ .etype = st_end }
+ };
+@@ -150,7 +149,7 @@ static const struct slot_table_entry vesnin_phb9_0_slot[] = {
+ 	{
+ 		.etype = st_pluggable_slot,
+ 		.location = ST_LOC_DEVFN(0,0),
+-		.name = "AUX connector30",
++		.name = "AUX connector3",
+ 	},
+ 	{ .etype = st_end }
+ };
+@@ -186,7 +185,16 @@ static const struct slot_table_entry vesnin_phbA_1_slot[] = {
+ 	{
+ 		.etype = st_pluggable_slot,
+ 		.location = ST_LOC_DEVFN(0,0),
+-		.name = "AUX connector40",
++		.name = "AUX connector4",
++	},
++	{ .etype = st_end }
++};
++
++static const struct slot_table_entry vesnin_phbA_2_slot[] = {
++	{
++		.etype = st_pluggable_slot,
++		.location = ST_LOC_DEVFN(0,0),
++		.name = "AUX connector5",
+ 	},
+ 	{ .etype = st_end }
+ };
+@@ -218,6 +226,11 @@ static const struct slot_table_entry vesnin_phb_table[] = {
+ 		.location = ST_LOC_PHB(CHIP_ID_CPU1,1),
+ 		.children = vesnin_phb8_1_slot,
+ 	},
++	{
++		.etype = st_phb,
++		.location = ST_LOC_PHB(CHIP_ID_CPU1,2),
++		.children = vesnin_phb8_2_slot,
++	},
+ 
+ 	{
+ 		.etype = st_phb,
+@@ -245,6 +258,11 @@ static const struct slot_table_entry vesnin_phb_table[] = {
+ 		.location = ST_LOC_PHB(CHIP_ID_CPU3,1),
+ 		.children = vesnin_phbA_1_slot,
+ 	},
++	{
++		.etype = st_phb,
++		.location = ST_LOC_PHB(CHIP_ID_CPU3,2),
++		.children = vesnin_phbA_2_slot,
++	},
+ 	{ .etype = st_end }
+ };
+ 
+-- 
+2.24.1
+
