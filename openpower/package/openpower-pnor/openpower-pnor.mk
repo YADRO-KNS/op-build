@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-OPENPOWER_PNOR_VERSION ?= e582e4ac5941da0e728aecb44e22ecc5ee0ac53a
+OPENPOWER_PNOR_VERSION ?= aa4c350255616b6406830fd6b564aebefaf7add4
 OPENPOWER_PNOR_SITE ?= $(call github,open-power,pnor,$(OPENPOWER_PNOR_VERSION))
 
 OPENPOWER_PNOR_LICENSE = Apache-2.0
@@ -19,11 +19,9 @@ ifeq ($(BR2_PACKAGE_IMA_CATALOG),y)
 OPENPOWER_PNOR_DEPENDENCIES += ima-catalog
 endif
 
-ifeq ($(BR2_PACKAGE_SKIBOOT_EMBED_PAYLOAD),n)
+ifneq ($(BR2_PACKAGE_SKIBOOT_EMBED_PAYLOAD),y)
 
 ifeq ($(BR2_TARGET_ROOTFS_INITRAMFS),y)
-OPENPOWER_PNOR_DEPENDENCIES += linux-rebuild-with-initramfs
-else
 OPENPOWER_PNOR_DEPENDENCIES += linux
 endif
 
