@@ -1,0 +1,48 @@
+From de5b970d6a41895c0bfa8ea2cf2d95c3dc4c6e63 Mon Sep 17 00:00:00 2001
+From: Stewart Smith <stewart@linux.ibm.com>
+Date: Fri, 3 May 2019 16:45:53 +1000
+Subject: [PATCH] Disable fast-reset for POWER8
+
+There is a bug with fast-reset when CPU cores are busy, which can be
+reproduced by running `stress` and then trying `reboot -ff` (this is
+what the op-test test cases FastRebootHostStress and
+FastRebootHostStressTorture do). What happens is the cores lock up,
+which isn't the best thing in the world when you want them to start
+executing instructions again.
+
+A workaround is to use instruction ramming, which while greatly
+increasing the reliability of fast-reset on p8, doesn't make it perfect.
+
+Instruction ramming is what pdbg was modified to do in order to have the
+sreset functionality work reliably on p8.
+pdbg patches: https://patchwork.ozlabs.org/project/pdbg/list/?series=96593&state=*
+
+Fixes: https://github.com/open-power/skiboot/issues/185
+Signed-off-by: Stewart Smith <stewart@linux.ibm.com>
+Signed-off-by: Oliver O'Halloran <oohall@gmail.com>
+Signed-off-by: Artem Senichev <a.senichev@yadro.com>
+---
+ core/platform.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/core/platform.c b/core/platform.c
+index 570a4309..724716e2 100644
+--- a/core/platform.c
++++ b/core/platform.c
+@@ -59,8 +59,11 @@ static int64_t opal_cec_reboot(void)
+ 
+ 	opal_quiesce(QUIESCE_HOLD, -1);
+ 
+-	/* Try fast-reset unless explicitly disabled */
+-	if (!nvram_query_eq("fast-reset","0"))
++	/*
++	 * Bugs in P8 mean fast reboot isn't 100% reliable when cores
++	 * are busy, so only attempt if explicitly *enabled*.
++	 */
++	if (nvram_query_eq("fast-reset", "1"))
+ 		fast_reboot();
+ 
+ 	console_complete_flush();
+-- 
+2.31.1
+
